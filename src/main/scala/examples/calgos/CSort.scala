@@ -1,4 +1,4 @@
-package examples.algorithms
+package examples.calgos
 
 import scala.scalanative.native
 import native._, Nat._
@@ -31,8 +31,6 @@ object Comparators {
   * `stdlib` library.
   */
 object QuickSortNative {
-  type _10 = Digit[_1, _0]
-  type _100 = Digit[_1, Digit[_0, _0]]
 
   def elementGen(limit: Int) : Int = scala.util.Random.nextInt(limit)
 
