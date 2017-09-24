@@ -26,13 +26,51 @@ object Comparators {
   }
 }
 
-/** 
+object MemoryAlloc {
+
+  def elementGen(limit: Int) : Int = scala.util.Random.nextInt(limit)
+
+  // Note: Best thing not to create functions like this (though the abstraction
+  // is appreciated); its usefulness is zero. However, if you want to have
+  // functions perform throw-away computations that leverage native memory then
+  // its one option though i'm not sure how good this option is.
+  def generateRandomSmallArray = {
+    var index = 0
+    val size = 10
+    val data = native.stackalloc[CArray[Int, _10]]
+    while(index < size) {
+      !(data._1 + index) = elementGen(100)
+      index += 1
+    }
+    data
+  }
+ 
+  // Note: Returning a tuple of type `(Ptr[Int], Int)` is apparently not
+  // allowed and instead i needed to return only the pointer to the data which
+  // is of type `Ptr[Int]`.
+  //
+  // It is pretty canonical i guess to have memory allocated on the heap and
+  // return a pointer to it which you have to free it later else there's a
+  // memory-leak !
+  //
+  def generateRandomLargeArray = {
+    var index = 0
+    val size = 1000000
+    val data = stdlib.malloc(sizeof[Int] * 1000000).cast[Ptr[Int]]
+    while(index < 1000000) {
+      val value = elementGen(100)
+      !(data + index) = value
+      index += 1
+    }
+    data
+  }
+
+}
+/*
   * Allocates data on the stack and invokes the native `qsort` from the
   * `stdlib` library.
   */
 object QuickSortNative {
-
-  def elementGen(limit: Int) : Int = scala.util.Random.nextInt(limit)
 
   def print_array[SIZE <: Digit[_,_]](prefix: String, a: Ptr[CArray[Int, SIZE]], size : Int) = {
     var index = 0
@@ -42,23 +80,40 @@ object QuickSortNative {
     }
   }
 
-  def main(args: Array[String]) {
-    val this_array_size = 10
+  def print_array2[SIZE <: Digit[_,_]](prefix: String, a: Ptr[Int], size : Int) = {
     var index = 0
-
-    // Prepare an array of random data
-    val data = native.stackalloc[CArray[Int, _10]]
-    while(index < this_array_size) {
-      !(data._1 + index) = elementGen(100)
+    while(index < size) {
+      println(s"$prefix -> element:[${!(a + index)}]")
       index += 1
     }
+  }
 
-    print_array[_10]("before", data, this_array_size)
+  def main(args: Array[String]) {
 
+    // Prepare an array of random data, memory should be free once it goes out
+    // of scope. Canonical approach in unmanaged languages like C/C++
+    val local_array_size = 10
+    var index = 0
+    val dataStack = native.stackalloc[CArray[Int, _10]]
+    while(index < local_array_size) {
+      !(dataStack._1 + index) = MemoryAlloc.elementGen(100)
+      index += 1
+    }
+    print_array[_10]("before", dataStack, local_array_size)
     // Invoke the sorting function
-    CSortAlgos.qsort(data.cast[Ptr[Unit]], 10, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
+    CSortAlgos.qsort(dataStack.cast[Ptr[Unit]], 10, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
+    print_array[_10]("after", dataStack, local_array_size)
 
-    print_array[_10]("after", data, this_array_size)
+    // Data arrays generated on heap; processed on main thread and freed in the
+    // main thread. Uncomment the printlns if you are really keen to look at
+    // it.
+    val dataSize = 1000000
+    val data = MemoryAlloc.generateRandomLargeArray
+    //print_array2[_1000000]("before", data, dataSize)
+    CSortAlgos.qsort(data.cast[Ptr[Unit]], dataSize, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
+
+    //print_array2[_1000000]("after", data, dataSize)
+    stdlib.free(data.cast[Ptr[Byte]])
 
   }
 }
