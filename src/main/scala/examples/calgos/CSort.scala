@@ -24,6 +24,26 @@ object Comparators {
     else if (!_a > !_b) 1
     else 0
   }
+
+  // Note: Apparently, producing a stable value is necessarily because of the following
+  // issue:
+  //
+  // https://github.com/scala-native/scala-native/issues/910
+  //
+  // and we can then use it in the `Zone` otherwise, scala-native would
+  // actually produce compilation errors related to failing to codegen due to
+  // detected closures.
+  // 
+  //  [error]   Can't get function pointer to a closure with captures: List(anonfun$main$3.this) in application scala.scalanative.native.CFunctionPtr.fromFunction2({
+  // [error]   {
+  // [error]     (new <$anon: Function2>(anonfun$main$3.this): Function2)
+  // [error]   }
+  // [error] })
+  // [error]      while compiling: /Users/raymondtay/ScalaNative/src/main/scala/examples/calgos/CSort.scala
+  // [error]         during phase: nir
+  // [error]      library version: version 2.11.11
+  // 
+  val cmp_fn = CFunctionPtr.fromFunction2(compare_fn)
 }
 
 object MemoryAlloc {
@@ -129,7 +149,7 @@ object QuickSortNative {
 
     /***************************************************
       *
-      *  Zone
+      *  Zone (is my favourite approach)
       *
       */////////
 
@@ -143,27 +163,11 @@ object QuickSortNative {
         !(xs + index) = value
         index += 1
       }
-    
+   
       print_array2[_10]("before", xs, size)
-      /*
-       * Both approaches produces a compilation error
-       *
-      CSortAlgos.qsort(xs.cast[Ptr[Unit]], size, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
-
-      CSortAlgos.qsort(xs.cast[Ptr[Unit]], size, 4, 
-        CFunctionPtr.fromFunction2(
-          new ((Ptr[Unit], Ptr[Unit]) => Int) {
-            def apply(a: Ptr[Unit], b: Ptr[Unit]) : Int = {
-              val _a = a.cast[Ptr[Int]]
-              val _b = b.cast[Ptr[Int]]
-              if (!_a < !_b) -1
-              else if (!_a > !_b) 1
-              else 0
-            }
-          })
-        )
-        */
+      CSortAlgos.qsort(xs.cast[Ptr[Unit]], size, 4, Comparators.cmp_fn)
       print_array2[_10]("after", xs, size)
+
     } // end of zone
 
 
