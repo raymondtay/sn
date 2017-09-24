@@ -56,8 +56,8 @@ object MemoryAlloc {
   def generateRandomLargeArray = {
     var index = 0
     val size = 1000000
-    val data = stdlib.malloc(sizeof[Int] * 1000000).cast[Ptr[Int]]
-    while(index < 1000000) {
+    val data = stdlib.malloc(sizeof[Int] * size).cast[Ptr[Int]]
+    while(index < size) {
       val value = elementGen(100)
       !(data + index) = value
       index += 1
@@ -90,6 +90,12 @@ object QuickSortNative {
 
   def main(args: Array[String]) {
 
+    /***************************************************
+      *
+      *  STACK
+      *
+      */////////
+
     // Prepare an array of random data, memory should be free once it goes out
     // of scope. Canonical approach in unmanaged languages like C/C++
     val local_array_size = 10
@@ -104,6 +110,12 @@ object QuickSortNative {
     CSortAlgos.qsort(dataStack.cast[Ptr[Unit]], 10, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
     print_array[_10]("after", dataStack, local_array_size)
 
+    /***************************************************
+      *
+      *  MANUAL HEAP
+      *
+      */////////
+
     // Data arrays generated on heap; processed on main thread and freed in the
     // main thread. Uncomment the printlns if you are really keen to look at
     // it.
@@ -115,5 +127,46 @@ object QuickSortNative {
     //print_array2[_1000000]("after", data, dataSize)
     stdlib.free(data.cast[Ptr[Byte]])
 
-  }
+    /***************************************************
+      *
+      *  Zone
+      *
+      */////////
+
+    // Anonymous zone for semi-memory management
+    Zone { implicit z =>
+      var index = 0
+      val size = 10
+      val xs : Ptr[Int] = alloc[Int](size)
+      while(index < size) {
+        val value = MemoryAlloc.elementGen(100)
+        !(xs + index) = value
+        index += 1
+      }
+    
+      print_array2[_10]("before", xs, size)
+      /*
+       * Both approaches produces a compilation error
+       *
+      CSortAlgos.qsort(xs.cast[Ptr[Unit]], size, 4, CFunctionPtr.fromFunction2(Comparators.compare_fn))
+
+      CSortAlgos.qsort(xs.cast[Ptr[Unit]], size, 4, 
+        CFunctionPtr.fromFunction2(
+          new ((Ptr[Unit], Ptr[Unit]) => Int) {
+            def apply(a: Ptr[Unit], b: Ptr[Unit]) : Int = {
+              val _a = a.cast[Ptr[Int]]
+              val _b = b.cast[Ptr[Int]]
+              if (!_a < !_b) -1
+              else if (!_a > !_b) 1
+              else 0
+            }
+          })
+        )
+        */
+      print_array2[_10]("after", xs, size)
+    } // end of zone
+
+
+  } // end of main
 }
+
